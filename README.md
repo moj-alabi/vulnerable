@@ -92,44 +92,71 @@ sudo ufw allow from 10.0.10.0/24 to any port 55000 proto tcp  comment "Wazuh RES
 sudo ufw reload
 ```
 
-#### 1b. Enable syslog input in ossec.conf
+#### 1b. Add syslog listener to Wazuh
 
-Add the following blocks inside `<ossec_config>` in `/var/ossec/etc/ossec.conf`.
-The easiest way — paste the contents of `monitoring/wazuh/ossec-syslog-remote.conf`
-(the file is already in this repo):
+Wazuh needs to know to accept logs from your CTF containers over the network.
+You do this by editing one config file on the Wazuh VM.
 
+**Step 1 — SSH into your Wazuh VM:**
 ```bash
-# From your CTF host – copy the snippet to the Wazuh VM
-scp monitoring/wazuh/ossec-syslog-remote.conf YOUR_USER@10.0.10.2:/tmp/
+ssh YOUR_USER@10.0.10.2
+```
 
-# On the Wazuh VM – append it before </ossec_config>
-sudo python3 - <<'EOF'
-conf = open('/var/ossec/etc/ossec.conf').read()
-snippet = open('/tmp/ossec-syslog-remote.conf').read()
-conf = conf.replace('</ossec_config>', snippet + '\n</ossec_config>', 1)
-open('/var/ossec/etc/ossec.conf', 'w').write(conf)
-print('Done')
-EOF
+**Step 2 — Open the Wazuh config file:**
+```bash
+sudo nano /var/ossec/etc/ossec.conf
+```
 
+**Step 3 — Scroll to the very bottom.** You will see a line that says:
+```
+</ossec_config>
+```
+
+**Step 4 — Paste the following lines *above* that `</ossec_config>` line:**
+```xml
+<!-- Accept syslog from CTF containers (rsyslog TCP/UDP 514) -->
+<remote>
+  <connection>syslog</connection>
+  <port>514</port>
+  <protocol>tcp</protocol>
+  <allowed-ips>10.0.10.0/24</allowed-ips>
+</remote>
+
+<remote>
+  <connection>syslog</connection>
+  <port>514</port>
+  <protocol>udp</protocol>
+  <allowed-ips>10.0.10.0/24</allowed-ips>
+</remote>
+
+<!-- Accept Wazuh agent connections from CTF containers -->
+<remote>
+  <connection>secure</connection>
+  <port>1514</port>
+  <protocol>tcp</protocol>
+  <allowed-ips>10.0.10.0/24</allowed-ips>
+</remote>
+```
+
+**Step 5 — Save and exit:**
+- In `nano`: press `Ctrl+X`, then `Y`, then `Enter`
+
+**Step 6 — Restart Wazuh so it picks up the change:**
+```bash
 sudo systemctl restart wazuh-manager
 ```
 
-The snippet enables:
-- Syslog TCP/UDP on port 514 from `10.0.10.0/24`
-- Agent event listener on port 1514
-
-#### 1c. Enable the Logstash/Beats input (for Filebeat)
-
+**Step 7 — Confirm it worked (you should see ports 514 and 1514 listed):**
 ```bash
-# On the Wazuh VM
-sudo /var/ossec/bin/ossec-control enable client-syslog
-sudo systemctl restart wazuh-manager
+sudo ss -tlnp | grep -E '514|1514|1515'
 ```
 
-> ✅ Verify the manager is listening:
+> 💡 **If you prefer not to edit manually**, you can run this one-liner on the Wazuh VM instead of steps 2–6:
 > ```bash
-> sudo ss -tlnp | grep -E '514|1514|1515|5044'
+> sudo sed -i 's|</ossec_config>|<remote><connection>syslog</connection><port>514</port><protocol>tcp</protocol><allowed-ips>10.0.10.0/24</allowed-ips></remote><remote><connection>syslog</connection><port>514</port><protocol>udp</protocol><allowed-ips>10.0.10.0/24</allowed-ips></remote><remote><connection>secure</connection><port>1514</port><protocol>tcp</protocol><allowed-ips>10.0.10.0/24</allowed-ips></remote></ossec_config>|' /var/ossec/etc/ossec.conf && sudo systemctl restart wazuh-manager
 > ```
+
+> ℹ️ **Note:** In Wazuh 4.x there is no separate "enable syslog" command. Simply having the `<remote><connection>syslog</connection>...</remote>` block in `ossec.conf` and restarting is all that is needed. The old `ossec-control enable client-syslog` command does not exist in Wazuh 4.x.
 
 ---
 

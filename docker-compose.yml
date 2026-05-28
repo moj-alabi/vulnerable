@@ -138,27 +138,15 @@ services:
   # ----------------------------------------------------------
   # 5. Mutillidae II
   # ----------------------------------------------------------
-  mutillidae-db:
-    image: mariadb:10.3
-    container_name: mutillidae_db
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: mutillidae
-      MYSQL_DATABASE: nowasp
-      MYSQL_USER: nowasp
-      MYSQL_PASSWORD: nowasp
-    networks:
-      ctf_net:
-        ipv4_address: 172.20.0.16
-
   mutillidae:
-    image: webpwnized/mutillidae:latest
+    # citizenstig/nowasp = Mutillidae II (NOWASP) – well-known Docker Hub image
+    # Includes its own MySQL internally, no separate DB container needed
+    image: citizenstig/nowasp
     container_name: mutillidae_target
     restart: unless-stopped
-    depends_on:
-      - mutillidae-db
     ports:
       - "8084:80"
+      - "3306:3306"
     environment:
       <<: *wazuh-agent
     volumes:
