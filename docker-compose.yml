@@ -108,7 +108,7 @@ services:
   # 3. WebGoat 8.0
   # ----------------------------------------------------------
   webgoat:
-    image: webgoat/goat-and-wolf:v8.0.0.M26
+    image: webgoat/webgoat-8.0:latest
     container_name: webgoat_target
     restart: unless-stopped
     ports:
