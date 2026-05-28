@@ -1,0 +1,7 @@
+Error
+
+MySQL said: Documentation
+Cannot connect: invalid settings.
+mysqli_real_connect(): php_network_getaddresses: getaddrinfo failed: Try again
+mysqli_real_connect(): (HY000/2002): php_network_getaddresses: getaddrinfo failed: Try again
+phpMyAdmin tried to connect to the MySQL server, and the server rejected the connection. You should check the host, username and password in your configuration and make sure that they correspond to the information given by the administrator of the MySQL server.
