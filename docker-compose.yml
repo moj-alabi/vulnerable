@@ -1,0 +1,250 @@
+# ============================================================
+#  CTF Vulnerable Lab  –  Targets only
+#  Wazuh SIEM already running at 10.0.10.2 (external VM)
+#
+#  All containers sit on the host's flat 10.0.10.0/24 network
+#  via macvlan (or bridge + host-forwarded ports – see README).
+#
+#  Targets  : WordPress 4.6/PHP 5.6 (PHPMailer RCE + 15 vuln plugins),
+#              DVWA, WebGoat, Juice Shop, Mutillidae II,
+#              phpMyAdmin 4.8.1, SSH, FTP (vsftpd backdoor)
+# ============================================================
+
+networks:
+  # Bridge network – targets are reachable on the host IP
+  # Change to macvlan if you want each container on its own
+  # 10.0.10.x address (see README – Advanced Networking).
+  ctf_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+# ── Wazuh agent env – injected into every target ──────────
+x-wazuh-agent: &wazuh-agent
+  WAZUH_MANAGER: "10.0.10.2"          # ← your existing Wazuh VM
+  WAZUH_MANAGER_PORT: "1514"
+  WAZUH_AGENT_GROUP: "ctf-targets"
+  WAZUH_REGISTRATION_SERVER: "10.0.10.2"
+  WAZUH_REGISTRATION_PORT: "1515"
+
+# ===========================================================
+#  VULNERABLE TARGETS
+# ===========================================================
+services:
+
+  # ----------------------------------------------------------
+  # 1. WordPress 4.6 / PHP 5.6 – maximum vulnerability surface
+  #    Core CVEs : CVE-2016-10033 (PHPMailer unauth RCE),
+  #                CVE-2017-9061 (SSRF), CVE-2019-8942 (crop RCE)
+  #    Plugins   : 15 critically-CVE'd plugins (see README)
+  #    Misconfig : WP_DEBUG on, wp-config.php.bak, .env, .git,
+  #                world-writable uploads, pre-planted webshell
+  # ----------------------------------------------------------
+  wordpress-db:
+    image: mysql:5.7
+    container_name: wp_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - wp_db_data:/var/lib/mysql
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.11
+
+  wordpress:
+    # WP 4.6 + PHP 5.6 + Apache 2.4 (Debian Jessie base)
+    # CVEs: CVE-2016-10033 (PHPMailer unauth RCE), CVE-2016-7168,
+    #        CVE-2016-7169, CVE-2017-9061, CVE-2017-9062 + many more
+    image: wordpress:4.6-php5.6-apache
+    container_name: wp_target
+    restart: unless-stopped
+    depends_on:
+      - wordpress-db
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: wordpress-db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_TABLE_PREFIX: wp_
+      # WP_PUBLIC_URL tells setup.sh what URL to register WordPress under.
+      # Leave blank to auto-detect from the container's default-route IP,
+      # or set explicitly: WP_PUBLIC_URL=http://10.0.10.5:8080
+      WP_PUBLIC_URL: "${WP_PUBLIC_URL:-}"
+      <<: *wazuh-agent
+    volumes:
+      - wp_data:/var/www/html
+      - ./configs/wordpress/setup.sh:/docker-entrypoint-initwp.d/setup.sh
+      # rsyslog config ships Apache logs → Wazuh syslog :514
+      - ./configs/rsyslog/rsyslog-apache.conf:/etc/rsyslog.d/apache.conf:ro
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.12
+
+  # ----------------------------------------------------------
+  # 2. DVWA – Damn Vulnerable Web Application
+  # ----------------------------------------------------------
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: dvwa_target
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    environment:
+      <<: *wazuh-agent
+    volumes:
+      - ./configs/rsyslog/rsyslog-apache.conf:/etc/rsyslog.d/apache.conf:ro
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.13
+
+  # ----------------------------------------------------------
+  # 3. WebGoat 8.0
+  # ----------------------------------------------------------
+  webgoat:
+    image: webgoat/goat-and-wolf:v8.0.0.M26
+    container_name: webgoat_target
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+      - "9090:9090"
+    environment:
+      <<: *wazuh-agent
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.14
+
+  # ----------------------------------------------------------
+  # 4. OWASP Juice Shop
+  # ----------------------------------------------------------
+  juiceshop:
+    image: bkimminich/juice-shop:v12.3.0
+    container_name: juiceshop_target
+    restart: unless-stopped
+    ports:
+      - "8083:3000"
+    environment:
+      <<: *wazuh-agent
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.15
+
+  # ----------------------------------------------------------
+  # 5. Mutillidae II
+  # ----------------------------------------------------------
+  mutillidae-db:
+    image: mariadb:10.3
+    container_name: mutillidae_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: mutillidae
+      MYSQL_DATABASE: nowasp
+      MYSQL_USER: nowasp
+      MYSQL_PASSWORD: nowasp
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.16
+
+  mutillidae:
+    image: webpwnized/mutillidae:latest
+    container_name: mutillidae_target
+    restart: unless-stopped
+    depends_on:
+      - mutillidae-db
+    ports:
+      - "8084:80"
+    environment:
+      <<: *wazuh-agent
+    volumes:
+      - ./configs/rsyslog/rsyslog-apache.conf:/etc/rsyslog.d/apache.conf:ro
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.17
+
+  # ----------------------------------------------------------
+  # 6. phpMyAdmin 4.8.1 – CVE-2018-12613
+  # ----------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:4.8.1
+    container_name: phpmyadmin_target
+    restart: unless-stopped
+    ports:
+      - "8085:80"
+    environment:
+      PMA_HOST: wordpress-db
+      PMA_USER: root
+      PMA_PASSWORD: root
+      <<: *wazuh-agent
+    volumes:
+      - ./configs/rsyslog/rsyslog-apache.conf:/etc/rsyslog.d/apache.conf:ro
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.18
+
+  # ----------------------------------------------------------
+  # 7. SSH brute-force target  (Wazuh agent installed inside)
+  # ----------------------------------------------------------
+  ssh-target:
+    build:
+      context: ./targets/ssh-target
+      dockerfile: Dockerfile
+      args:
+        WAZUH_MANAGER: "10.0.10.2"
+    container_name: ssh_target
+    restart: unless-stopped
+    ports:
+      - "2222:22"
+    environment:
+      <<: *wazuh-agent
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.19
+
+  # ----------------------------------------------------------
+  # 8. FTP target – vsftpd backdoor  (Wazuh agent installed)
+  # ----------------------------------------------------------
+  ftp-target:
+    build:
+      context: ./targets/ftp-target
+      dockerfile: Dockerfile
+      args:
+        WAZUH_MANAGER: "10.0.10.2"
+    container_name: ftp_target
+    restart: unless-stopped
+    ports:
+      - "2121:21"
+      - "6200:6200"
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.20
+
+  # ----------------------------------------------------------
+  # Filebeat – ships Docker container logs → Wazuh syslog
+  # ----------------------------------------------------------
+  filebeat:
+    image: elastic/filebeat:7.17.0
+    container_name: filebeat
+    restart: unless-stopped
+    user: root
+    environment:
+      WAZUH_HOST: "10.0.10.2"
+    volumes:
+      - ./monitoring/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      ctf_net:
+        ipv4_address: 172.20.0.21
+
+# ===========================================================
+#  NAMED VOLUMES
+# ===========================================================
+volumes:
+  wp_data:
+  wp_db_data:

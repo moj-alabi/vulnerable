@@ -1,0 +1,299 @@
+<!-- ============================================================
+     CTF Lab – Custom Wazuh Detection Rules
+     Detects common attack patterns across all vulnerable targets
+     ============================================================ -->
+<group name="ctf,web,ssh,ftp,exploit">
+
+  <!-- ========================================================
+       WordPress Attack Rules  (group: wordpress)
+       ======================================================== -->
+
+  <!-- WP XML-RPC brute force -->
+  <rule id="100001" level="10">
+    <if_sid>31100</if_sid>
+    <url>/xmlrpc.php</url>
+    <match>POST</match>
+    <description>WordPress XML-RPC brute-force attempt detected</description>
+    <group>attack,authentication_failed,wordpress</group>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+  </rule>
+
+  <!-- WP admin login brute force -->
+  <rule id="100002" level="10" frequency="8" timeframe="60">
+    <if_matched_sid>100001</if_matched_sid>
+    <same_srcip/>
+    <description>WordPress XML-RPC brute-force: multiple attempts from same IP</description>
+    <group>attack,authentication_failed,wordpress,brute_force</group>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+  </rule>
+
+  <!-- WP admin login page repeated failures -->
+  <rule id="100003" level="8">
+    <if_sid>31151</if_sid>
+    <url>/wp-login.php</url>
+    <description>WordPress admin login page accessed</description>
+    <group>authentication_failed,wordpress</group>
+  </rule>
+
+  <!-- WP plugin/theme file upload (potential webshell) -->
+  <rule id="100004" level="12">
+    <if_sid>31100</if_sid>
+    <url>/wp-admin/async-upload.php</url>
+    <match>POST</match>
+    <description>WordPress file upload via admin panel – possible webshell upload (CVE-2019-8942)</description>
+    <group>attack,web,wordpress,rce</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1505.003</id>
+    </mitre>
+  </rule>
+
+  <!-- WP theme/plugin editor write -->
+  <rule id="100005" level="11">
+    <if_sid>31100</if_sid>
+    <url>/wp-admin/theme-editor.php</url>
+    <match>POST</match>
+    <description>WordPress theme editor used – possible code injection</description>
+    <group>attack,wordpress,rce</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       SQL Injection Detection
+       ======================================================== -->
+
+  <rule id="100010" level="10">
+    <if_sid>31100,31101</if_sid>
+    <url_regex>union.*select|select.*from|insert.*into|drop.*table|--|1=1|or.*1=1|' or|; --</url_regex>
+    <description>SQL Injection attempt detected in HTTP request</description>
+    <group>attack,sql_injection,web</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <rule id="100011" level="12" frequency="5" timeframe="30">
+    <if_matched_sid>100010</if_matched_sid>
+    <same_srcip/>
+    <description>SQL Injection scanning: multiple attempts from same IP</description>
+    <group>attack,sql_injection,web,scanning</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       XSS Detection
+       ======================================================== -->
+
+  <rule id="100015" level="8">
+    <if_sid>31100,31101</if_sid>
+    <url_regex>&lt;script|javascript:|onerror=|onload=|alert\(|document\.cookie</url_regex>
+    <description>Cross-Site Scripting (XSS) attempt detected</description>
+    <group>attack,xss,web</group>
+    <mitre>
+      <id>T1059.007</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       Directory Traversal / LFI Detection
+       ======================================================== -->
+
+  <rule id="100020" level="10">
+    <if_sid>31100,31101</if_sid>
+    <url_regex>\.\./|%2e%2e%2f|%252e%252e|/etc/passwd|/etc/shadow|/proc/self</url_regex>
+    <description>Directory traversal / Local File Inclusion (LFI) attempt</description>
+    <group>attack,lfi,web</group>
+    <mitre>
+      <id>T1083</id>
+    </mitre>
+  </rule>
+
+  <!-- phpMyAdmin LFI (CVE-2018-12613) -->
+  <rule id="100021" level="13">
+    <if_sid>31100</if_sid>
+    <url>/index.php</url>
+    <url_regex>target=db_sql\.php%253f/\.\.\/\.\.</url_regex>
+    <description>phpMyAdmin CVE-2018-12613 LFI/RCE exploit attempt detected</description>
+    <group>attack,lfi,rce,phpmyadmin</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       SSH Attack Rules
+       ======================================================== -->
+
+  <!-- SSH brute force (builds on built-in rule 5712) -->
+  <rule id="100030" level="12" frequency="10" timeframe="60">
+    <if_matched_sid>5712</if_matched_sid>
+    <same_srcip/>
+    <description>SSH brute-force attack: 10+ failed attempts in 60s</description>
+    <group>attack,authentication_failed,brute_force,ssh</group>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+  </rule>
+
+  <!-- SSH login with weak/default credentials -->
+  <rule id="100031" level="10">
+    <if_sid>5715</if_sid>
+    <match>Accepted password</match>
+    <regex>for (admin|root|guest|test|user|ftpuser) from</regex>
+    <description>SSH login with known weak/default credentials</description>
+    <group>authentication_success,ssh,default_credentials</group>
+    <mitre>
+      <id>T1078</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       FTP Attack Rules
+       ======================================================== -->
+
+  <rule id="100040" level="10">
+    <decoded_as>vsftpd</decoded_as>
+    <match>FAIL LOGIN</match>
+    <description>FTP authentication failure</description>
+    <group>authentication_failed,ftp</group>
+  </rule>
+
+  <rule id="100041" level="12" frequency="8" timeframe="60">
+    <if_matched_sid>100040</if_matched_sid>
+    <same_srcip/>
+    <description>FTP brute-force attack detected</description>
+    <group>attack,authentication_failed,brute_force,ftp</group>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+  </rule>
+
+  <!-- vsftpd backdoor trigger (CVE-2011-2523) -->
+  <rule id="100042" level="15">
+    <if_sid>100040</if_sid>
+    <match>:)</match>
+    <description>vsftpd 2.3.4 backdoor trigger detected (CVE-2011-2523) – USER containing smiley</description>
+    <group>attack,exploit,ftp,backdoor,rce</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1133</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       Port / Network Scanning Detection
+       ======================================================== -->
+
+  <rule id="100050" level="8">
+    <if_sid>1002</if_sid>
+    <match>SYN_RECV</match>
+    <description>Possible port scan detected (multiple SYN_RECV states)</description>
+    <group>attack,scanning,network</group>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+  </rule>
+
+  <rule id="100051" level="10" frequency="50" timeframe="10">
+    <if_matched_sid>100050</if_matched_sid>
+    <same_srcip/>
+    <description>Active network port scan from single source IP</description>
+    <group>attack,scanning,network</group>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       Web Scanning / Enumeration
+       ======================================================== -->
+
+  <!-- Nikto / dirb / gobuster signatures -->
+  <rule id="100060" level="8">
+    <if_sid>31100</if_sid>
+    <match>Nikto|nikto|sqlmap|dirbuster|gobuster|wfuzz|masscan|nmap</match>
+    <description>Web vulnerability scanner User-Agent detected</description>
+    <group>attack,scanning,web</group>
+    <mitre>
+      <id>T1595.002</id>
+    </mitre>
+  </rule>
+
+  <rule id="100061" level="9" frequency="200" timeframe="60">
+    <if_matched_sid>31100</if_matched_sid>
+    <same_srcip/>
+    <description>Potential web directory brute-forcing (high request rate)</description>
+    <group>attack,scanning,web</group>
+    <mitre>
+      <id>T1595.002</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       Privilege Escalation Indicators
+       ======================================================== -->
+
+  <rule id="100070" level="12">
+    <if_sid>5501</if_sid>
+    <match>sudo: </match>
+    <regex>COMMAND=/bin/bash|COMMAND=/bin/sh|COMMAND=/usr/bin/python|COMMAND=.*/vim</regex>
+    <description>Potential privilege escalation via sudo GTFOBin</description>
+    <group>attack,privilege_escalation</group>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+  </rule>
+
+  <!-- SUID binary abuse -->
+  <rule id="100071" level="11">
+    <if_sid>550</if_sid>
+    <match>chmod.*[uU]\+[sS]</match>
+    <description>SUID bit set on file – possible persistence or priv-esc</description>
+    <group>attack,privilege_escalation,suid</group>
+    <mitre>
+      <id>T1548.001</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       Reverse Shell / Command Execution Indicators
+       ======================================================== -->
+
+  <rule id="100080" level="13">
+    <if_sid>31100,31101</if_sid>
+    <url_regex>bash+-i|/dev/tcp|nc+-e|ncat|python.*socket|perl.*socket|php.*exec|cmd\.exe|powershell</url_regex>
+    <description>Possible reverse shell attempt in HTTP request</description>
+    <group>attack,rce,web,reverse_shell</group>
+    <mitre>
+      <id>T1059</id>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- ========================================================
+       CTF Flag Submission / Discovery Events
+       ======================================================== -->
+
+  <rule id="100090" level="3">
+    <if_sid>550,554</if_sid>
+    <match>flag.txt</match>
+    <description>CTF flag file accessed or modified</description>
+    <group>ctf,fim</group>
+  </rule>
+
+  <rule id="100091" level="5">
+    <if_sid>550,554</if_sid>
+    <match>root_flag.txt</match>
+    <description>CTF root flag file accessed – player may have achieved root</description>
+    <group>ctf,fim,privilege_escalation</group>
+  </rule>
+
+</group>

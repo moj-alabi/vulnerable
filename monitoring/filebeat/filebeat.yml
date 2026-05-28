@@ -1,0 +1,47 @@
+filebeat.inputs:
+
+  # ── All Docker container stdout/stderr logs ───────────────
+  - type: container
+    enabled: true
+    paths:
+      - /var/lib/docker/containers/*/*.log
+    processors:
+      - add_docker_metadata:
+          host: "unix:///var/run/docker.sock"
+      - decode_json_fields:
+          fields: ["message"]
+          target: ""
+          overwrite_keys: true
+
+filebeat.modules:
+  - module: apache
+    access:
+      enabled: true
+    error:
+      enabled: true
+  - module: system
+    syslog:
+      enabled: true
+    auth:
+      enabled: true
+
+# ── Ship to existing Wazuh manager at 10.0.10.2 ──────────
+# Wazuh listens for Filebeat/Logstash on port 5044
+output.logstash:
+  hosts: ["10.0.10.2:5044"]
+  ssl.enabled: false
+
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_docker_metadata: ~
+
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+monitoring.enabled: false

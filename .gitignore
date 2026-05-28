@@ -1,0 +1,18 @@
+# TLS certificates – never commit private keys
+monitoring/wazuh/certs/
+
+# Docker volumes (if bind-mounted locally)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+*.swp
+*.swo
+
+# Temp files from attack simulation
+/tmp/wp_cookies.txt
+/tmp/ftp_flag.txt
