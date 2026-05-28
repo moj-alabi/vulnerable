@@ -146,7 +146,8 @@ services:
     restart: unless-stopped
     ports:
       - "8084:80"
-      - "3306:3306"
+      # Port 3306 NOT published on host to avoid conflict with wordpress-db
+      # Access Mutillidae's internal MySQL via phpMyAdmin: server = 172.20.0.17
     environment:
       <<: *wazuh-agent
     volumes:
@@ -162,12 +163,19 @@ services:
     image: phpmyadmin/phpmyadmin:4.8.1
     container_name: phpmyadmin_target
     restart: unless-stopped
+    depends_on:
+      - wordpress-db
     ports:
       - "8085:80"
     environment:
-      PMA_HOST: wordpress-db
+      # Use static IP so hostname resolution cannot fail
+      PMA_HOST: "172.20.0.11"
+      PMA_PORT: "3306"
       PMA_USER: root
       PMA_PASSWORD: root
+      # Allow connecting to any host from the UI (useful for Mutillidae DB too)
+      PMA_ARBITRARY: "1"
+      MYSQL_ROOT_PASSWORD: root
       <<: *wazuh-agent
     volumes:
       - ./configs/rsyslog/rsyslog-apache.conf:/etc/rsyslog.d/apache.conf:ro
