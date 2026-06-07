@@ -16,3 +16,4 @@ Thumbs.db
 # Temp files from attack simulation
 /tmp/wp_cookies.txt
 /tmp/ftp_flag.txt
+Dome/dome-rs/target/
