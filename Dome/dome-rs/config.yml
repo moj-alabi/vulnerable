@@ -1,0 +1,58 @@
+proxy:
+  listen_host: "0.0.0.0"
+  listen_port: 8888
+  upstream: "http://127.0.0.1:80"
+  upstream_timeout_secs: 30
+  body_limit_bytes: 1048576
+
+waf:
+  mode: "block"          # block | detect
+
+  allowed_ips:
+    - "127.0.0.1"
+
+  blocked_ips: []
+  blocked_paths: []
+
+  rate_limit:
+    window_seconds: 60
+    max_requests: 200
+    sensitive_max: 20
+    ban_duration_secs: 300
+
+  blocked_ja3: []
+  blocked_ja4_prefixes: []
+
+  # IP reputation auto-ban
+  reputation_threshold: 150   # cumulative score before ban
+  reputation_ban_secs: 3600   # 1 hour
+
+  # JS proof-of-work challenge (browser verification)
+  challenge_enabled: false
+  challenge_categories:
+    - "scanner"
+    - "ratelimit"
+
+  # Minimum threat score to act (0 = act on any hit)
+  score_threshold: 30
+
+notifications:
+  discord_webhook: null
+  # discord_webhook: "https://discord.com/api/webhooks/XXX/YYY"
+  discord_min_action: "BLOCK"
+
+  webhook_url: null
+  webhook_headers: {}
+  webhook_min_action: "BLOCK"
+
+  syslog:
+    enabled: false
+    host: "10.0.0.1"
+    port: 514
+    proto: "udp"
+    min_action: "BLOCK"
+
+logging:
+  path: "/var/log/dome/waf.log"
+  max_bytes: 10485760
+  backup_count: 5
