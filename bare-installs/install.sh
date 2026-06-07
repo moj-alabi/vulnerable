@@ -193,10 +193,26 @@ install_mutillidae() {
             "$DEST"
     fi
 
-    local CFG="${DEST}/classes/MySQLHandler.php"
+    # Mutillidae stores DB creds in includes/database-config.inc
+    # (classes/MySQLHandler.php just reads those constants)
+    local CFG="${DEST}/includes/database-config.inc"
     if [[ -f "$CFG" ]]; then
-        sed -i "s/'DB_USERNAME', 'root'/'DB_USERNAME', 'mutillidae'/"  "$CFG" || true
-        sed -i "s/'DB_PASSWORD', ''/'DB_PASSWORD', 'mutillidae_pass'/" "$CFG" || true
+        # Use the dedicated 'mutillidae' DB user (root auth_socket won't work on Ubuntu 22.04+)
+        sed -i "s/define('DB_USERNAME'.*$/define('DB_USERNAME', 'mutillidae');/"    "$CFG" || true
+        sed -i "s/define('DB_PASSWORD'.*$/define('DB_PASSWORD', 'mutillidae_pass');/" "$CFG" || true
+        sed -i "s/define('DB_NAME'.*$/define('DB_NAME', 'mutillidae');/"             "$CFG" || true
+    else
+        warn "Mutillidae: database-config.inc not found at $CFG – checking alternate paths…"
+        # Older repo layout puts it in src/
+        for ALT in "${DEST}/src/includes/database-config.inc" \
+                   "${DEST}/classes/MySQLHandler.php"; do
+            if [[ -f "$ALT" ]]; then
+                sed -i "s/'DB_USERNAME'[^,]*, *'[^']*'/'DB_USERNAME', 'mutillidae'/"    "$ALT" || true
+                sed -i "s/'DB_PASSWORD'[^,]*, *'[^']*'/'DB_PASSWORD', 'mutillidae_pass'/" "$ALT" || true
+                info "Patched $ALT"
+                break
+            fi
+        done
     fi
 
     chown -R www-data:www-data "$DEST"
@@ -226,12 +242,19 @@ install_bwapp() {
         rm -rf /tmp/bwapp-src
     fi
 
-    local CFG="${DEST}/admin/settings.php"
-    [[ -f "$CFG" ]] && {
-        sed -i "s/\$db_username = .*/\$db_username = 'bwapp';/"       "$CFG"
-        sed -i "s/\$db_password = .*/\$db_password = 'bwapp_pass';/"  "$CFG"
-        sed -i "s/\$db_name = .*/\$db_name = 'bwapp';/"               "$CFG"
-    }
+    # raesene/bWAPP stores creds in app/connect_i.php  (not admin/settings.php)
+    local CFG="${DEST}/app/connect_i.php"
+    if [[ -f "$CFG" ]]; then
+        sed -i "s/\$db_username *= *\"[^\"]*\"/\$db_username = \"bwapp\"/"       "$CFG" || true
+        sed -i "s/\$db_password *= *\"[^\"]*\"/\$db_password = \"bwapp_pass\"/"  "$CFG" || true
+        sed -i "s/\$db_name *= *\"[^\"]*\"/\$db_name = \"bwapp\"/"               "$CFG" || true
+        # Also handle single-quote style
+        sed -i "s/\$db_username *= *'[^']*'/\$db_username = 'bwapp'/"       "$CFG" || true
+        sed -i "s/\$db_password *= *'[^']*'/\$db_password = 'bwapp_pass'/"  "$CFG" || true
+        sed -i "s/\$db_name *= *'[^']*'/\$db_name = 'bwapp'/"               "$CFG" || true
+    else
+        warn "bWAPP: app/connect_i.php not found – skipping DB config patch"
+    fi
 
     chown -R www-data:www-data "$DEST"
     chmod -R 755 "$DEST"
