@@ -1,0 +1,53 @@
+# =============================================================================
+#  Dome WAF – Configuration
+#  Copy this file and edit for your environment.
+#  Run:  python waf.py --config config.yml
+# =============================================================================
+
+proxy:
+  # Address Dome listens on (clients connect here)
+  listen_host: "0.0.0.0"
+  listen_port: 8888
+
+  # The real web server Dome forwards clean requests to
+  upstream: "http://127.0.0.1:80"
+
+  # Seconds before upstream request times out
+  upstream_timeout: 30
+
+waf:
+  # block  – actively returns 403 for matching requests
+  # detect – forwards all requests but logs matches (passive mode)
+  mode: "block"
+
+  # IPs that always bypass all WAF checks
+  allowed_ips:
+    - "127.0.0.1"
+    # - "10.0.0.5"   # example: trusted admin workstation
+
+  # IPs that are always blocked outright
+  blocked_ips: []
+    # - "192.168.1.100"
+
+  # URL path prefixes that are always blocked (exact prefix match)
+  blocked_paths: []
+    # - "/.git"
+    # - "/admin/secret"
+
+  rate_limit:
+    # Rolling window size in seconds
+    window_seconds: 60
+    # Max requests per IP in the window (general)
+    max_requests: 200
+    # Max requests per IP for sensitive paths (login, admin, etc.)
+    sensitive_max: 20
+    # How long (seconds) to ban an IP after exceeding the limit
+    ban_duration: 300
+
+logging:
+  # Path to the JSON log file (rotated automatically)
+  path: "/var/log/dome/waf.log"
+  # Max size per log file in bytes (default 10 MB)
+  max_bytes: 10485760
+  # Number of rotated backups to keep
+  backup_count: 5
