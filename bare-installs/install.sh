@@ -112,18 +112,38 @@ enable_service() {
 section_deps() {
     info "Installing system dependencies…"
     apt-get update -qq
+
+    # ── PHP extensions ──────────────────────────────────────────────────────
     apt-get install -y --no-install-recommends \
         git curl wget unzip \
         "php${PHP_VER}" "php${PHP_VER}-fpm" \
         "php${PHP_VER}-mysql" "php${PHP_VER}-xml" "php${PHP_VER}-mbstring" \
         "php${PHP_VER}-curl" "php${PHP_VER}-gd" "php${PHP_VER}-ldap" \
-        "php${PHP_VER}-zip" "php${PHP_VER}-bcmath" \
-        mysql-server \
+        "php${PHP_VER}-zip" "php${PHP_VER}-bcmath"
+
+    # ── MySQL / MariaDB – only install if nothing is already present ────────
+    if mysql --version &>/dev/null || mysqld --version &>/dev/null 2>/dev/null; then
+        info "MySQL/MariaDB already installed – skipping database server install"
+    else
+        info "Installing MySQL server…"
+        # Prefer mysql-server; fall back to mariadb-server if not available
+        if apt-cache show mysql-server &>/dev/null 2>&1; then
+            apt-get install -y --no-install-recommends mysql-server
+        else
+            apt-get install -y --no-install-recommends mariadb-server
+        fi
+    fi
+
+    # ── Java 17 ─────────────────────────────────────────────────────────────
+    apt-get install -y --no-install-recommends \
         openjdk-17-jre-headless \
-        nodejs npm \
         python3 python3-pip
 
-    # Make sure npm/node are reasonably new
+    # ── Node.js ─────────────────────────────────────────────────────────────
+    # Install nodejs/npm only if missing, then upgrade if too old
+    if ! command -v node &>/dev/null; then
+        apt-get install -y --no-install-recommends nodejs npm
+    fi
     if node --version | grep -qE '^v1[0-5]\.'; then
         warn "Node.js is old; installing LTS via NodeSource…"
         curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
