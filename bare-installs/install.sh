@@ -216,19 +216,21 @@ install_bwapp() {
     if [[ -d "$DEST" ]]; then
         warn "bWAPP already present – skipping"
     else
+        # Public mirror of bWAPP (no auth required)
         git clone --depth 1 \
-            https://github.com/jehy-security/bWAPP-docker.git \
+            https://github.com/raesene/bWAPP.git \
             /tmp/bwapp-src
-        cp -r /tmp/bwapp-src/bwapp "$DEST" 2>/dev/null || \
-            cp -r /tmp/bwapp-src "$DEST"
+
+        # The repo root IS the web app
+        cp -r /tmp/bwapp-src "$DEST"
         rm -rf /tmp/bwapp-src
     fi
 
     local CFG="${DEST}/admin/settings.php"
     [[ -f "$CFG" ]] && {
-        sed -i "s/\$db_username = .*/\$db_username = 'bwapp';/"      "$CFG"
-        sed -i "s/\$db_password = .*/\$db_password = 'bwapp_pass';"/ "$CFG"
-        sed -i "s/\$db_name = .*/\$db_name = 'bwapp';/"              "$CFG"
+        sed -i "s/\$db_username = .*/\$db_username = 'bwapp';/"       "$CFG"
+        sed -i "s/\$db_password = .*/\$db_password = 'bwapp_pass';/"  "$CFG"
+        sed -i "s/\$db_name = .*/\$db_name = 'bwapp';/"               "$CFG"
     }
 
     chown -R www-data:www-data "$DEST"
