@@ -36,6 +36,29 @@ waf:
   # Minimum threat score to act (0 = act on any hit)
   score_threshold: 30
 
+  # Block TRACE/TRACK/CONNECT always; also enforce strict method allowlist
+  enforce_http_methods: false
+
+  # Inspect response bodies for data leakage (stack traces, SQL errors, keys)
+  dlp_enabled: false
+
+  # Virtual patching – custom rules (evaluated before generic engine)
+  # virtual_patches:
+  #   - name: "Block PHP eval in admin upload"
+  #     path_prefix: "/admin/upload"
+  #     method: "POST"
+  #     body_regex: '\beval\s*\('
+  #     action: "block"
+  #     score: 100
+  #
+  #   - name: "Allowlist known scanner IP"
+  #     path_prefix: "/"
+  #     param_name: "debug"
+  #     param_regex: "true"
+  #     action: "log"
+  #     score: 5
+  virtual_patches: []
+
 notifications:
   discord_webhook: null
   # discord_webhook: "https://discord.com/api/webhooks/XXX/YYY"

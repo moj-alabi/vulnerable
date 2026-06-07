@@ -8,8 +8,6 @@ mod challenge;
 use std::sync::Arc;
 use axum::{Router, routing::any};
 use hyper_util::client::legacy::{Client as HyperClient, connect::HttpConnector};
-use http_body_util::Full;
-use bytes::Bytes;
 use clap::Parser;
 use tracing_subscriber::EnvFilter;
 
@@ -65,6 +63,7 @@ async fn main() -> anyhow::Result<()> {
         .build(connector);
 
     let challenge_enabled = cfg.waf.challenge_enabled;
+    let dlp_enabled       = cfg.waf.dlp_enabled;
     let upstream  = cfg.proxy.upstream.trim_end_matches('/').to_string();
     let body_limit = cfg.proxy.body_limit_bytes;
 
@@ -75,6 +74,7 @@ async fn main() -> anyhow::Result<()> {
         upstream: upstream.clone(),
         body_limit,
         challenge_enabled,
+        dlp_enabled,
         hyper,
     });
 
@@ -97,6 +97,7 @@ async fn main() -> anyhow::Result<()> {
     println!("  Upstream:  {upstream}");
     println!("  Mode:      {}", cfg.waf.mode.to_uppercase());
     println!("  Challenge: {}", if challenge_enabled { "enabled" } else { "disabled" });
+    println!("  DLP:       {}", if dlp_enabled { "enabled" } else { "disabled" });
     println!("  Log:       {}", cfg.logging.path);
     println!();
 

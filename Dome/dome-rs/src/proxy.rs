@@ -2,7 +2,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode},
+    http::{Request, StatusCode},
     response::Response,
 };
 use bytes::Bytes;
@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::challenge;
-use crate::config::ProxyConfig;
 use crate::engine::{Action, Engine, RequestContext};
+use crate::engine::response as dlp;
 use crate::logger::WafLogger;
 use crate::notifiers::NotifierManager;
 
@@ -36,13 +36,14 @@ fn is_hop(name: &str) -> bool {
 }
 
 pub struct AppState {
-    pub engine:    Arc<Engine>,
-    pub logger:    Arc<WafLogger>,
-    pub notifiers: Arc<NotifierManager>,
-    pub upstream:  String,
-    pub body_limit: usize,
+    pub engine:          Arc<Engine>,
+    pub logger:          Arc<WafLogger>,
+    pub notifiers:       Arc<NotifierManager>,
+    pub upstream:        String,
+    pub body_limit:      usize,
     pub challenge_enabled: bool,
-    pub hyper:     HyperClient<HttpConnector, Full<Bytes>>,
+    pub dlp_enabled:     bool,
+    pub hyper:           HyperClient<HttpConnector, Full<Bytes>>,
 }
 
 pub async fn handle(
@@ -212,6 +213,25 @@ async fn forward(
             let body_bytes = resp.into_body().collect().await
                 .map(|b| b.to_bytes())
                 .unwrap_or_default();
+
+            // DLP: inspect response body for leakage
+            if state.dlp_enabled && !body_bytes.is_empty() {
+                let body_str = String::from_utf8_lossy(&body_bytes);
+                let leaks = dlp::check(&body_str, status.as_u16());
+                if !leaks.is_empty() {
+                    let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                    let fake_hits: Vec<crate::engine::Hit> = leaks.iter().map(|l| crate::engine::Hit {
+                        rule_id:     l.rule_id,
+                        description: l.description,
+                        category:    l.category,
+                        score:       10,
+                    }).collect();
+                    state.logger.log("DLP", client_ip, method, path,
+                        status.as_u16(), elapsed, 0, &fake_hits);
+                    state.notifiers.dispatch("LOG", client_ip, method, path,
+                        status.as_u16(), 0, &fake_hits);
+                }
+            }
 
             rb.body(Body::from(body_bytes)).unwrap()
         }

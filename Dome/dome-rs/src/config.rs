@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use crate::engine::vpatch::VPatchRule;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,6 +76,18 @@ pub struct WafConfig {
     /// Minimum threat score to block (0-100).  Each rule hit adds points.
     #[serde(default = "default_score_threshold")]
     pub score_threshold: u32,
+
+    /// Block TRACE/TRACK/CONNECT always; also block non-standard methods when true
+    #[serde(default)]
+    pub enforce_http_methods: bool,
+
+    /// Inspect response bodies for data leakage (DLP)
+    #[serde(default)]
+    pub dlp_enabled: bool,
+
+    /// Virtual patch rules (custom per-path/method/param rules)
+    #[serde(default)]
+    pub virtual_patches: Vec<VPatchRule>,
 }
 
 fn default_mode()            -> String { "block".into() }

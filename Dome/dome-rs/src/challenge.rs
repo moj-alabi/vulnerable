@@ -8,7 +8,7 @@
 /// This is a lightweight alternative to a hard 403 – it filters
 /// bots and automated scanners that can't execute JavaScript.
 
-use axum::response::{Html, Response};
+use axum::response::Response;
 use axum::http::StatusCode;
 
 const CHALLENGE_HTML: &str = r#"<!DOCTYPE html>
