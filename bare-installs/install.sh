@@ -12,7 +12,8 @@
 #  Usage:  sudo bash install.sh
 # =============================================================================
 
-set -euo pipefail
+# Do NOT use set -e here – we want to continue past individual app failures
+set -uo pipefail
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -76,11 +77,22 @@ run_installer() {
     echo -e "${CYAN}────────────────────────────────────────────────────${NC}"
     echo -e "${CYAN}  Installing: ${NAME}${NC}"
     echo -e "${CYAN}────────────────────────────────────────────────────${NC}"
-    if bash "$SCRIPT" 2>&1 | tee -a "$LOG_FILE"; then
+
+    # Run in a subshell so any 'exit' or unhandled error stays contained.
+    # tee exit code is irrelevant; we check the script exit code via PIPESTATUS.
+    set +e
+    bash "$SCRIPT" 2>&1 | tee -a "$LOG_FILE"
+    local EXIT_CODE="${PIPESTATUS[0]}"
+    set -e
+
+    if [[ "$EXIT_CODE" -eq 0 ]]; then
         PASS+=("$NAME")
+        echo -e "${GREEN}[DONE]${NC}  ${NAME}"
     else
-        FAIL+=("$NAME")
-        echo -e "${RED}[FAILED]${NC}  ${NAME} – check log: ${LOG_FILE}"
+        FAIL+=("$NAME  (exit code ${EXIT_CODE})")
+        echo -e "${RED}[FAILED]${NC}  ${NAME} exited with code ${EXIT_CODE}"
+        echo -e "${RED}         ${NC}  To retry:  sudo bash apps/$2"
+        echo -e "${RED}         ${NC}  Full log:  ${LOG_FILE}"
     fi
     echo ""
 }
