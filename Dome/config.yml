@@ -44,6 +44,48 @@ waf:
     # How long (seconds) to ban an IP after exceeding the limit
     ban_duration: 300
 
+  # JA3/JA4 TLS fingerprint blocklists (supplements built-in list)
+  # Requires upstream TLS terminator to inject X-JA3-Fingerprint header
+  blocked_ja3: []
+    # - "6734f37431670b3ab4292b8f60f29984"   # Metasploit
+    # - "a0e9f5d64349fb13191bc781f81f42e1"   # SQLMap
+
+  blocked_ja4_prefixes: []
+    # - "t13d190900_"   # Cobalt Strike beacon prefix
+
+# =============================================================================
+# Notifications
+# =============================================================================
+notifications:
+  # ── Discord Webhook ──────────────────────────────────────────────────────
+  # Paste your Discord channel webhook URL here
+  discord_webhook: null
+  # discord_webhook: "https://discord.com/api/webhooks/XXXXXXXX/YYYYYYY"
+
+  # Minimum severity to send to Discord: BLOCK | LOG | ALLOW
+  discord_min_action: "BLOCK"
+
+  # ── Generic HTTP Webhook ──────────────────────────────────────────────────
+  # POST raw event JSON to any URL (Slack incoming webhooks, SIEM, etc.)
+  webhook_url: null
+  # webhook_url: "https://hooks.slack.com/services/..."
+
+  # Optional extra headers (e.g. for auth tokens)
+  webhook_headers: {}
+  # webhook_headers:
+  #   Authorization: "Bearer mytoken"
+
+  # Minimum severity: BLOCK | LOG | ALLOW
+  webhook_min_action: "BLOCK"
+
+  # ── Remote Syslog ─────────────────────────────────────────────────────────
+  syslog:
+    enabled: false
+    host: "10.0.0.1"
+    port: 514
+    proto: "udp"    # udp | tcp
+    min_action: "BLOCK"
+
 logging:
   # Path to the JSON log file (rotated automatically)
   path: "/var/log/dome/waf.log"

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from . import sqli, xss, lfi, rce, scanner
 from .ratelimit import RateLimiter
+from .. import fingerprint as fp
 
 
 @dataclass
@@ -44,6 +45,8 @@ class RuleEngine:
             sensitive_max=rl_cfg.get("sensitive_max", 20),
             ban_duration=rl_cfg.get("ban_duration", 300),
         )
+        self.blocked_ja3: list[str] = config.get("blocked_ja3", [])
+        self.blocked_ja4_prefixes: list[str] = config.get("blocked_ja4_prefixes", [])
 
     def _collect_values(self, ctx: RequestContext) -> list[str]:
         """Gather all user-supplied strings to inspect."""
@@ -107,12 +110,19 @@ class RuleEngine:
         if rl_hit:
             return InspectionResult(action="BLOCK", hits=[rl_hit])
 
-        # 5. Scanner detection (UA + path)
+        # 5. JA3 / JA4 fingerprint
+        hits.extend(fp.check(
+            ctx.headers,
+            extra_blocked_ja3=self.blocked_ja3,
+            extra_blocked_ja4_prefixes=self.blocked_ja4_prefixes,
+        ))
+
+        # 6. Scanner detection (UA + path)
         ua = ctx.headers.get("User-Agent", "")
         hits.extend(scanner.check_ua(ua))
         hits.extend(scanner.check_path(ctx.path))
 
-        # 6. Payload inspection
+        # 7. Payload inspection
         for value in self._collect_values(ctx):
             if not value:
                 continue

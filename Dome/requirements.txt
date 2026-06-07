@@ -1,2 +1,4 @@
 aiohttp>=3.9.0
 PyYAML>=6.0
+# aiohttp already bundles everything needed for HTTP client + server
+# No extra deps needed for syslog (stdlib socket) or Discord (aiohttp)

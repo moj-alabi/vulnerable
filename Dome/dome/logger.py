@@ -64,7 +64,8 @@ class WafLogger:
         status_code: int,
         hits: list[dict],
         duration_ms: float,
-    ) -> None:
+    ) -> dict:
+        """Log the request and return the event dict (used by notifiers)."""
         record = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "product": "dome-waf",
@@ -81,3 +82,4 @@ class WafLogger:
         level = logging.WARNING if action in ("BLOCK", "LOG") else logging.INFO
         extra = {"action": action}
         self._logger.log(level, json.dumps(record), extra=extra)
+        return record

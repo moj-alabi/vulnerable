@@ -19,6 +19,7 @@ import yaml
 from dome.rules.engine import RuleEngine
 from dome.logger import WafLogger
 from dome.proxy import DomeProxy
+from dome.notifiers import NotifierManager
 
 
 def load_config(path: str) -> dict:
@@ -55,13 +56,23 @@ def main() -> None:
     # Merge waf config into engine config
     engine_cfg = {**waf_cfg}
 
-    logger  = WafLogger(
+    logger    = WafLogger(
         log_path=log_cfg.get("path", "/var/log/dome/waf.log"),
         max_bytes=log_cfg.get("max_bytes", 10_485_760),
         backup_count=log_cfg.get("backup_count", 5),
     )
-    engine  = RuleEngine(engine_cfg)
-    proxy   = DomeProxy(proxy_cfg, engine, logger)
+    engine    = RuleEngine(engine_cfg)
+    notifiers = NotifierManager(config)
+    proxy     = DomeProxy(proxy_cfg, engine, logger, notifiers)
+
+    if notifiers.has_any():
+        active = []
+        if notifiers.discord_url:  active.append("Discord")
+        if notifiers.webhook_url:  active.append("Webhook")
+        if notifiers.syslog:       active.append(f"Syslog({notifiers.syslog.host}:{notifiers.syslog.port})")
+        print(f"[Dome WAF v0.1.0] Notifiers: {', '.join(active)}")
+    else:
+        print("[Dome WAF v0.1.0] Notifiers: none configured")
 
     print(f"[Dome WAF v0.1.0] Mode: {engine.mode.upper()}")
     proxy.run()

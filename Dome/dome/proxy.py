@@ -12,6 +12,7 @@ from aiohttp import web
 
 from .rules.engine import RuleEngine, RequestContext
 from .logger import WafLogger
+from .notifiers import NotifierManager
 
 
 BLOCK_RESPONSE_BODY = b"""<!DOCTYPE html>
@@ -26,13 +27,14 @@ BLOCK_RESPONSE_BODY = b"""<!DOCTYPE html>
 
 
 class DomeProxy:
-    def __init__(self, config: dict, engine: RuleEngine, logger: WafLogger):
+    def __init__(self, config: dict, engine: RuleEngine, logger: WafLogger, notifiers: NotifierManager | None = None):
         self.upstream = config["upstream"].rstrip("/")
         self.listen_host = config.get("listen_host", "0.0.0.0")
         self.listen_port = int(config.get("listen_port", 8888))
         self.timeout = aiohttp.ClientTimeout(total=config.get("upstream_timeout", 30))
         self.engine = engine
         self.logger = logger
+        self.notifiers = notifiers
         self._session: aiohttp.ClientSession | None = None
 
     # ── aiohttp app lifecycle ─────────────────────────────────────────────────
@@ -77,7 +79,7 @@ class DomeProxy:
 
         if result.blocked:
             elapsed = (time.monotonic() - start) * 1000
-            self.logger.log_request(
+            event = self.logger.log_request(
                 action="BLOCK",
                 client_ip=client_ip,
                 method=request.method,
@@ -86,6 +88,8 @@ class DomeProxy:
                 hits=result.hits,
                 duration_ms=elapsed,
             )
+            if self.notifiers and event:
+                self.notifiers.dispatch(self._session, event)
             return web.Response(
                 status=403,
                 content_type="text/html",
@@ -131,7 +135,7 @@ class DomeProxy:
                 resp_headers["X-Dome-Action"] = result.action  # ALLOW or LOG
 
                 elapsed = (time.monotonic() - start) * 1000
-                self.logger.log_request(
+                event = self.logger.log_request(
                     action=result.action,
                     client_ip=client_ip,
                     method=request.method,
@@ -140,6 +144,8 @@ class DomeProxy:
                     hits=result.hits,
                     duration_ms=elapsed,
                 )
+                if self.notifiers and event and result.hits:
+                    self.notifiers.dispatch(self._session, event)
 
                 return web.Response(
                     status=upstream_resp.status,
