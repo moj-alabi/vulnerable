@@ -15,7 +15,6 @@ No Docker required. Each app runs as its own unprivileged system user and is reg
 | **WackoPicko** | PHP | `/wackopicko` | Realistic e-commerce target |
 | **Hackazon** | PHP | `/hackazon` | Amazon-like vulnerable store |
 | **OWASP WebGoat 2023** | Java (JAR) | `/WebGoat` | Guided security lessons |
-| **DVNA** | Node.js | `/dvna/` | OWASP Top-10 Node app |
 | **OWASP Juice Shop** | Node.js | `/juice-shop/` | Modern SPA with 100+ challenges |
 | **OWASP WrongSecrets** | Java (JAR) | `/wrongsecrets/` | Secrets management challenges |
 
@@ -129,7 +128,6 @@ sudo journalctl -u wrongsecrets -f
 | Apache2 | 80 | direct |
 | PHP | mod_php (in-process) | Apache2 `Alias` |
 | WebGoat | 8080 (loopback) | Apache2 `ProxyPass` → `/WebGoat` |
-| DVNA | 9001 (loopback) | Apache2 `ProxyPass` → `/dvna/` |
 | Juice Shop | 3000 (loopback) | Apache2 `ProxyPass` → `/juice-shop/` |
 | WrongSecrets | 8085 (loopback) | Apache2 `ProxyPass` → `/wrongsecrets/` |
 
@@ -159,6 +157,5 @@ sudo mysql -u root -e "
   DROP DATABASE IF EXISTS mutillidae;
   DROP DATABASE IF EXISTS bwapp;
   DROP DATABASE IF EXISTS hackazon;
-  DROP DATABASE IF EXISTS dvna;
 "
 ```

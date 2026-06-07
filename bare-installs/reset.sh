@@ -25,7 +25,7 @@ echo ""
 
 # ── 1. Stop & remove systemd services ────────────────────────────────────────
 info "Stopping and removing systemd services…"
-for SVC in webgoat dvna juiceshop wrongsecrets; do
+for SVC in webgoat juiceshop wrongsecrets; do
     if systemctl list-unit-files "${SVC}.service" &>/dev/null 2>&1; then
         systemctl disable --now "$SVC" 2>/dev/null || true
         rm -f "/etc/systemd/system/${SVC}.service"
@@ -49,7 +49,7 @@ done
 
 # ── 3. Remove standalone app directories from /opt ───────────────────────────
 info "Removing standalone app directories…"
-for DIR in /opt/webgoat /opt/dvna /opt/juice-shop /opt/wrongsecrets; do
+for DIR in /opt/webgoat /opt/juice-shop /opt/wrongsecrets; do
     if [[ -d "$DIR" ]]; then
         rm -rf "$DIR"
         success "  Removed $DIR"
@@ -60,7 +60,7 @@ done
 
 # ── 4. Remove dedicated system users ─────────────────────────────────────────
 info "Removing dedicated system users…"
-for USR in webgoat dvna juiceshop wrongsecrets; do
+for USR in webgoat juiceshop wrongsecrets; do
     if id "$USR" &>/dev/null; then
         userdel "$USR" 2>/dev/null || true
         success "  Removed user: $USR"
@@ -85,8 +85,6 @@ mysql -u root 2>/dev/null <<'SQL' || warn "MySQL cleanup failed – may need man
 DROP DATABASE IF EXISTS mutillidae;
 DROP DATABASE IF EXISTS bwapp;
 DROP DATABASE IF EXISTS hackazon;
-DROP DATABASE IF EXISTS dvna;
-
 DROP USER IF EXISTS 'mutillidae'@'localhost';
 DROP USER IF EXISTS 'bwapp'@'localhost';
 DROP USER IF EXISTS 'hackazon'@'localhost';

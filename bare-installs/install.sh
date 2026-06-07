@@ -13,7 +13,6 @@
 #
 #  Standalone  (Apache2 reverse-proxied to a sub-path)
 #    • OWASP WebGoat 2023   → /WebGoat          (Java, port 8080)
-#    • DVNA                 → /dvna             (Node, port 9001)
 #    • OWASP Juice Shop     → /juice-shop       (Node, port 3000)
 #    • WrongSecrets         → /wrongsecrets     (Java, port 8085)
 #
@@ -119,8 +118,6 @@ GRANT ALL PRIVILEGES ON bwapp.* TO 'bwapp'@'localhost';
 CREATE DATABASE IF NOT EXISTS hackazon CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS 'hackazon'@'localhost' IDENTIFIED BY 'hackazon_pass';
 GRANT ALL PRIVILEGES ON hackazon.* TO 'hackazon'@'localhost';
-
-CREATE DATABASE IF NOT EXISTS dvna;
 
 FLUSH PRIVILEGES;
 SQL
@@ -391,73 +388,6 @@ WGBLOCK
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  SECTION 9 – DVNA  (Node – port 9001)
-# ═════════════════════════════════════════════════════════════════════════════
-install_dvna() {
-    info "Installing DVNA…"
-    local INSTALL_DIR="/opt/dvna"
-
-    if [[ -d "$INSTALL_DIR" ]]; then
-        warn "DVNA directory already exists – skipping clone"
-    else
-        git clone --depth 1 \
-            https://github.com/appsecco/dvna.git \
-            "$INSTALL_DIR"
-    fi
-
-    (cd "$INSTALL_DIR" && npm install --omit=dev 2>/dev/null)
-
-    cat > "${INSTALL_DIR}/.env" <<ENV
-MYSQL_USER=root
-MYSQL_DATABASE=dvna
-MYSQL_PASSWORD=
-MYSQL_HOST=127.0.0.1
-MYSQL_PORT=3306
-PORT=9001
-ENV
-
-    id -u dvna &>/dev/null || useradd -r -s /bin/false -d "$INSTALL_DIR" dvna
-    chown -R dvna:dvna "$INSTALL_DIR"
-
-    cat > /etc/systemd/system/dvna.service <<UNIT
-[Unit]
-Description=DVNA – Damn Vulnerable Node.js App
-After=network.target mysql.service
-
-[Service]
-User=dvna
-WorkingDirectory=${INSTALL_DIR}
-EnvironmentFile=${INSTALL_DIR}/.env
-ExecStart=$(which node) server.js
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-    enable_service dvna
-
-    # DVNA serves at its root /, proxy strip the prefix
-    cat >> "$APACHE_CONF" <<'DVNABLOCK'
-
-# ── DVNA (proxy → 127.0.0.1:9001) ───────────────────────
-ProxyRequests Off
-<Location /dvna/>
-    ProxyPass        http://127.0.0.1:9001/
-    ProxyPassReverse http://127.0.0.1:9001/
-    ProxyPreserveHost On
-    Require all granted
-</Location>
-
-DVNABLOCK
-
-    success "DVNA installed → http://<ip>/dvna/"
-}
-
-# ═════════════════════════════════════════════════════════════════════════════
 #  SECTION 10 – OWASP Juice Shop  (Node – port 3000)
 # ═════════════════════════════════════════════════════════════════════════════
 install_juiceshop() {
@@ -615,7 +545,6 @@ main() {
     install_hackazon
 
     install_webgoat
-    install_dvna
     install_juiceshop
     install_wrongsecrets
 
@@ -636,7 +565,6 @@ main() {
     echo ""
     echo -e "  ${CYAN}Standalone apps (reverse-proxied through Apache2)${NC}"
     echo -e "  ● WebGoat 2023    →  http://${IP}/WebGoat   (Java, ~60 s startup)"
-    echo -e "  ● DVNA            →  http://${IP}/dvna/"
     echo -e "  ● Juice Shop      →  http://${IP}/juice-shop/"
     echo -e "  ● WrongSecrets    →  http://${IP}/wrongsecrets/"
     echo ""
