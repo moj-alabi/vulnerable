@@ -14,6 +14,7 @@ pub mod reputation;
 pub mod anomaly;
 pub mod vpatch;
 pub mod response;
+pub mod libinject;
 
 use std::sync::Arc;
 use std::collections::HashSet;
@@ -200,6 +201,15 @@ impl Engine {
         let inputs = self.collect_inputs(ctx);
         for raw in &inputs {
             let norm = normaliser::normalise(raw);
+
+            // libinjection runs FIRST as primary SQLi/XSS detector
+            // (real tokeniser – same engine as ModSecurity CRS)
+            hits.extend(libinject::check(&norm));
+
+            // Regex modules run as supplementary/fallback:
+            //   - catch time-based blind SQLi (no SQL structure for tokeniser)
+            //   - catch DOM-based XSS patterns
+            //   - catch LFI, RCE, SSRF, CRLF (not covered by libinjection)
             hits.extend(sqli::check(&norm));
             hits.extend(xss::check(&norm));
             hits.extend(lfi::check(&norm));
