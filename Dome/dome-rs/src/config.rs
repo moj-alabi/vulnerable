@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use crate::engine::vpatch::VPatchRule;
+use crate::engine::session::SessionConfig;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,7 +89,17 @@ pub struct WafConfig {
     /// Virtual patch rules (custom per-path/method/param rules)
     #[serde(default)]
     pub virtual_patches: Vec<VPatchRule>,
+
+    /// CRS-equivalent paranoia level 1-4 (1 = low FP, 4 = maximum detection)
+    #[serde(default = "default_paranoia")]
+    pub paranoia_level: u8,
+
+    /// Per-IP session score accumulation config
+    #[serde(default)]
+    pub session: SessionConfig,
 }
+
+fn default_paranoia() -> u8 { 1 }
 
 fn default_mode()            -> String { "block".into() }
 fn default_rep_threshold()   -> u32    { 10 }

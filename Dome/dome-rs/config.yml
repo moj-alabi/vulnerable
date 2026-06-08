@@ -42,6 +42,21 @@ waf:
   # Inspect response bodies for data leakage (stack traces, SQL errors, keys)
   dlp_enabled: false
 
+  # CRS-equivalent paranoia level (1-4).
+  #   1 = production safe, low false positives (default)
+  #   2 = broader SQL/XSS structural patterns
+  #   3 = protocol anomaly checks
+  #   4 = SSTI detection (high FP risk, use in lab/research)
+  paranoia_level: 2
+
+  # Per-IP session score accumulation (catches slow/distributed attacks)
+  session:
+    window_secs: 300          # sliding window in seconds
+    warn_threshold: 20        # log only
+    challenge_threshold: 60   # serve JS PoW challenge
+    block_threshold: 120      # block + reputation-ban
+    max_requests: 500         # max requests per window before flood-block
+
   # Virtual patching – custom rules (evaluated before generic engine)
   # virtual_patches:
   #   - name: "Block PHP eval in admin upload"

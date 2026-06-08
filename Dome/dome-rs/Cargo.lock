@@ -349,6 +349,7 @@ dependencies = [
 name = "dome-waf"
 version = "1.0.0"
 dependencies = [
+ "aho-corasick",
  "anyhow",
  "async-trait",
  "axum",

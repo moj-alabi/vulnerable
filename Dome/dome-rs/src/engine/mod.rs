@@ -15,6 +15,8 @@ pub mod anomaly;
 pub mod vpatch;
 pub mod response;
 pub mod libinject;
+pub mod crs;
+pub mod session;
 
 use std::sync::Arc;
 use std::collections::HashSet;
@@ -25,6 +27,7 @@ use crate::config::WafConfig;
 use ratelimit::RateLimiter;
 use reputation::ReputationEngine;
 use vpatch::VPatcher;
+use session::{SessionTracker, SessionAction};
 
 // ── Shared hit type ───────────────────────────────────────────────────────────
 
@@ -87,7 +90,8 @@ pub struct Engine {
     cfg:           WafConfig,
     rate_limiter:  Arc<RateLimiter>,
     reputation:    Arc<ReputationEngine>,
-    vpatcher:      Arc<VPatcher>,
+    vpatcher:       Arc<VPatcher>,
+    session_tracker: Arc<SessionTracker>,
     allowed_ips:   HashSet<String>,
     blocked_ips:   HashSet<String>,
 }
@@ -100,9 +104,10 @@ impl Engine {
             cfg.reputation_ban_secs,
         ));
         let vpatcher = Arc::new(VPatcher::new(&cfg.virtual_patches));
+        let session_tracker = Arc::new(SessionTracker::new(cfg.session.clone()));
         let allowed_ips = cfg.allowed_ips.iter().cloned().collect();
         let blocked_ips = cfg.blocked_ips.iter().cloned().collect();
-        Self { cfg, rate_limiter, reputation, vpatcher, allowed_ips, blocked_ips }
+        Self { cfg, rate_limiter, reputation, vpatcher, session_tracker, allowed_ips, blocked_ips }
     }
 
     pub fn inspect(&self, ctx: &RequestContext<'_>) -> InspectionResult {
@@ -202,14 +207,13 @@ impl Engine {
         for raw in &inputs {
             let norm = normaliser::normalise(raw);
 
-            // libinjection runs FIRST as primary SQLi/XSS detector
-            // (real tokeniser – same engine as ModSecurity CRS)
+            // libinjection tokeniser (primary SQLi + XSS)
             hits.extend(libinject::check(&norm));
 
-            // Regex modules run as supplementary/fallback:
-            //   - catch time-based blind SQLi (no SQL structure for tokeniser)
-            //   - catch DOM-based XSS patterns
-            //   - catch LFI, RCE, SSRF, CRLF (not covered by libinjection)
+            // CRS-equivalent ruleset (Aho-Corasick + structural regex)
+            hits.extend(crs::check(&norm, self.cfg.paranoia_level));
+
+            // Regex modules (supplementary/fallback for non-CRS categories)
             hits.extend(sqli::check(&norm));
             hits.extend(xss::check(&norm));
             hits.extend(lfi::check(&norm));
@@ -228,7 +232,28 @@ impl Engine {
         // 14. Update reputation
         self.reputation.record(ctx.client_ip, total_score);
 
-        // 15. Decide action
+        // 15. Session score accumulation
+        let fired_rule_ids: Vec<&'static str> = hits.iter().map(|h| h.rule_id).collect();
+        let session_action = self.session_tracker.record(ctx.client_ip, total_score, &fired_rule_ids);
+
+        // If session escalates above per-request decision, use session action
+        if let SessionAction::Block { cumulative } = &session_action {
+            let action = if self.cfg.mode == "detect" { Action::Log } else { Action::Block };
+            hits.push(Hit {
+                rule_id: "SES-001",
+                description: "Session cumulative score exceeded block threshold",
+                category: "session",
+                score: *cumulative,
+            });
+            return InspectionResult { action, hits, total_score: *cumulative };
+        }
+        if let SessionAction::Challenge { cumulative: _ } = &session_action {
+            if self.cfg.challenge_enabled {
+                return InspectionResult { action: Action::Challenge, hits, total_score };
+            }
+        }
+
+        // 16. Decide action
         let action = if total_score < self.cfg.score_threshold {
             Action::Log
         } else {
