@@ -9,6 +9,8 @@ pub struct Config {
     pub proxy: ProxyConfig,
     pub waf: WafConfig,
     #[serde(default)]
+    pub admin: AdminConfig,
+    #[serde(default)]
     pub notifications: NotificationsConfig,
     #[serde(default)]
     pub logging: LoggingConfig,
@@ -100,6 +102,28 @@ pub struct WafConfig {
 }
 
 fn default_paranoia() -> u8 { 1 }
+
+// ── Admin dashboard ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AdminConfig {
+    /// Enable the admin dashboard
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_admin_host")]
+    pub listen_host: String,
+    #[serde(default = "default_admin_port")]
+    pub listen_port: u16,
+}
+
+fn default_admin_host() -> String { "127.0.0.1".into() }
+fn default_admin_port() -> u16    { 9000 }
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self { enabled: false, listen_host: default_admin_host(), listen_port: default_admin_port() }
+    }
+}
 
 fn default_mode()            -> String { "block".into() }
 fn default_rep_threshold()   -> u32    { 10 }

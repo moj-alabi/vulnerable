@@ -74,6 +74,12 @@ waf:
   #     score: 5
   virtual_patches: []
 
+# Admin dashboard (served on a separate port, never exposed publicly)
+admin:
+  enabled: true
+  listen_host: "127.0.0.1"
+  listen_port: 9000
+
 notifications:
   discord_webhook: null
   # discord_webhook: "https://discord.com/api/webhooks/XXX/YYY"

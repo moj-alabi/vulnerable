@@ -16,6 +16,7 @@ use crate::engine::{Action, Engine, RequestContext};
 use crate::engine::response as dlp;
 use crate::logger::WafLogger;
 use crate::notifiers::NotifierManager;
+use crate::stats::Stats;
 
 const BLOCK_BODY: &str = r#"<!DOCTYPE html>
 <html><head><title>403 – Blocked by Dome WAF</title></head>
@@ -39,6 +40,7 @@ pub struct AppState {
     pub engine:          Arc<Engine>,
     pub logger:          Arc<WafLogger>,
     pub notifiers:       Arc<NotifierManager>,
+    pub stats:           Arc<Stats>,
     pub upstream:        String,
     pub body_limit:      usize,
     pub challenge_enabled: bool,
@@ -106,10 +108,11 @@ pub async fn handle(
         }
 
         Action::Log => {
-            // Log the hits but forward anyway
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             state.logger.log("LOG", &client_ip, &method, &path, 0, elapsed, result.total_score, &result.hits);
             state.notifiers.dispatch("LOG", &client_ip, &method, &path, 0, result.total_score, &result.hits);
+            let rule_ids: Vec<&str> = result.hits.iter().map(|h| h.rule_id).collect();
+            state.stats.record("LOG", &client_ip, &method, &path, 0, result.total_score, &rule_ids, elapsed);
             let req2 = Request::from_parts(parts, Body::from(body_bytes));
             forward(&state, req2, &client_ip, &method, &path, &query, start, result.total_score, &result.hits).await
         }
@@ -118,10 +121,11 @@ pub async fn handle(
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             state.logger.log("CHALLENGE", &client_ip, &method, &path, 200, elapsed, result.total_score, &result.hits);
             state.notifiers.dispatch("CHALLENGE", &client_ip, &method, &path, 200, result.total_score, &result.hits);
+            let rule_ids: Vec<&str> = result.hits.iter().map(|h| h.rule_id).collect();
+            state.stats.record("CHALLENGE", &client_ip, &method, &path, 200, result.total_score, &rule_ids, elapsed);
             let challenge_id = format!("dome-{}", &client_ip);
             let return_url   = format!("{path}?{query}");
             let chal = challenge::challenge_response(&challenge_id, &return_url);
-            // Convert Response<String> to Response<Body>
             let (p, b) = chal.into_parts();
             Response::from_parts(p, Body::from(b))
         }
@@ -130,13 +134,15 @@ pub async fn handle(
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             state.logger.log("BLOCK", &client_ip, &method, &path, 403, elapsed, result.total_score, &result.hits);
             state.notifiers.dispatch("BLOCK", &client_ip, &method, &path, 403, result.total_score, &result.hits);
+            let rule_ids: Vec<&str> = result.hits.iter().map(|h| h.rule_id).collect();
+            state.stats.record("BLOCK", &client_ip, &method, &path, 403, result.total_score, &rule_ids, elapsed);
 
-            let rule_ids: String = result.hits.iter().map(|h| h.rule_id).collect::<Vec<_>>().join(",");
+            let rule_ids_str: String = result.hits.iter().map(|h| h.rule_id).collect::<Vec<_>>().join(",");
             Response::builder()
                 .status(StatusCode::FORBIDDEN)
                 .header("content-type", "text/html; charset=utf-8")
                 .header("x-dome-action", "BLOCK")
-                .header("x-dome-rules", rule_ids)
+                .header("x-dome-rules", rule_ids_str)
                 .body(Body::from(BLOCK_BODY))
                 .unwrap()
         }
@@ -194,9 +200,14 @@ async fn forward(
             if !hits.is_empty() {
                 state.logger.log("LOG", client_ip, method, path,
                     status.as_u16(), elapsed, score, hits);
+                let rule_ids: Vec<&str> = hits.iter().map(|h| h.rule_id).collect();
+                state.stats.record("LOG", client_ip, method, path,
+                    status.as_u16(), score, &rule_ids, elapsed);
             } else {
                 state.logger.log("ALLOW", client_ip, method, path,
                     status.as_u16(), elapsed, 0, &[]);
+                state.stats.record("ALLOW", client_ip, method, path,
+                    status.as_u16(), 0, &[], elapsed);
             }
 
             let mut rb = Response::builder()
@@ -239,6 +250,7 @@ async fn forward(
             tracing::error!("Upstream error: {e}");
             let elapsed = start.elapsed().as_secs_f64() * 1000.0;
             state.logger.log("ERROR", client_ip, method, path, 502, elapsed, 0, &[]);
+            state.stats.record("ERROR", client_ip, method, path, 502, 0, &[], elapsed);
             Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(Body::from(format!("Dome WAF: upstream unavailable – {e}")))
